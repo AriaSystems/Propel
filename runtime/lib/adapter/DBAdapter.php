@@ -470,7 +470,7 @@ abstract class DBAdapter
 
         // set the aliases
         foreach ($criteria->getAsColumns() as $alias => $col) {
-            $selectClause[] = $col . ' AS ' . $this->quoteIdentifier($alias);
+            $selectClause[] = $this->formatColumnAlias($col, $alias);
         }
 
         $selectModifiers = $criteria->getSelectModifiers();
@@ -607,5 +607,18 @@ abstract class DBAdapter
     public function doExplainPlan(PropelPDO $con, $query)
     {
         throw new PropelException("Explain plan is not implemented for this adapter");
+    }
+
+    /**
+     * Format the column aliases in select statements.
+     * 
+     * @param string $column name of the column
+     * @param string $alias  alias for the column
+     *
+     * @return string sql of a column from a select statment with the proper formatting
+     */
+    protected function formatColumnAlias($column, $alias) 
+    {
+        return $column . ' AS ' . $this->quoteIdentifier($alias);
     }
 }

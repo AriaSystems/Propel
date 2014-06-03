@@ -306,4 +306,17 @@ class DBOracle extends DBAdapter
 FROM PLAN_TABLE CONNECT BY PRIOR ID = PARENT_ID AND PRIOR STATEMENT_ID = STATEMENT_ID
 START WITH ID = 0 AND STATEMENT_ID = \'%s\' ORDER BY ID', $uniqueId);
     }
+
+    /**
+     * Format the column aliases in select statements.
+     * 
+     * @param string $column name of the column
+     * @param string $alias  alias for the column
+     *
+     * @return string sql of a column from a select statment with the proper formatting
+     */ 
+    protected function formatColumnAlias($column, $alias) 
+    {
+        return $column . ' ' . $alias;
+    }    
 }
