@@ -20,11 +20,6 @@
   "require-dev": {
     "pear-pear.php.net/PEAR_PackageFileManager2": "@stable"
   },
-  "extra": {
-    "branch-alias": {
-      "dev-master": "1.7-dev"
-    }
-  },
   "repositories": [
     {
       "type": "pear",
