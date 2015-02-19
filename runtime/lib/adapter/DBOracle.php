@@ -125,12 +125,12 @@ class DBOracle extends DBAdapter
             . ') B WHERE ';
 
         if ($offset > 0) {
-            $sql .= ' B.PROPEL_ROWNUM > ' . $offset;
+            $sql .= ' B.PROPEL_ROWNUM > ' . (0 + $offset);
             if ($limit > 0) {
-                $sql .= ' AND B.PROPEL_ROWNUM <= ' . ( $offset + $limit );
+                $sql .= ' AND B.PROPEL_ROWNUM <= ' . ((0 + $offset) + (0 + $limit));
             }
         } else {
-            $sql .= ' B.PROPEL_ROWNUM <= ' . $limit;
+            $sql .= ' B.PROPEL_ROWNUM <= ' . (0 + $limit);
         }
     }
 
