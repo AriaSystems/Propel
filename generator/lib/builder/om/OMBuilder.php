@@ -608,4 +608,18 @@ abstract class OMBuilder extends DataModelBuilder
     {
         return str_replace("\t", '    ', $matches[0]);
     }
+
+    /**
+     * Convenience method to get the locatle Table object.
+     * 
+     * @return Table
+     */
+    protected function getLocaleTable(Table $table)
+    {
+        if ($table->isTranslatable()) {
+            return $this->getTable()
+                ->getDatabase()
+                ->getTable($table->getLocaleTableName());
+        }
+    }
 }

@@ -278,6 +278,12 @@ class Table extends ScopedElement implements IDMethod
      * @var       boolean
      */
     private $reloadOnUpdate;
+    
+    /**
+     * The name of the table holding the translation information.
+     * @var string
+     */
+    private $localeTableName = null;
 
     /**
      * List of behaviors registered for this table
@@ -300,7 +306,7 @@ class Table extends ScopedElement implements IDMethod
      * @var       string
      */
     protected $defaultStringFormat;
-
+    
     /**
      * Constructs a table object with a name
      *
@@ -363,6 +369,7 @@ class Table extends ScopedElement implements IDMethod
         $this->reloadOnUpdate = $this->booleanValue($this->getAttribute("reloadOnUpdate"));
         $this->isCrossRef = $this->booleanValue($this->getAttribute("isCrossRef", false));
         $this->defaultStringFormat = $this->getAttribute('defaultStringFormat');
+        $this->localeTableName = $this->getAttribute("localeTable");
     }
 
     /**
@@ -2036,5 +2043,48 @@ class Table extends ScopedElement implements IDMethod
     public function getNonPrefixedName()
     {
         return $this->nonPrefixedName;
+    }
+    
+    /**
+     * Gets the name of the locale table.
+     *
+     * @return The name of the locale table
+     */
+    public function getLocaleTableName()
+    {
+        return $this->localeTableName;
+    }
+    
+    /**
+     * Set the value of locale table.
+     * @param     v	Value to assign to localeTableName.
+     */
+    public function setLocaleTableName($v)
+    {
+        $this->localeTableName = $v;
+    }
+    
+    /**
+     * Returns if the table is translatable
+     */
+    public function isTranslatable()
+    {
+        return $this->localeTableName !== null;
+    }
+
+    /**
+     * Returns the ForeignKey object for the locale table
+     * @return NULL|ForeignKey
+     */
+    public function getFKforLocaleTable()
+    {
+        if (! $this->isTranslatable()) {
+            return null;
+        }
+        foreach ($this->getReferrers() as $fk) {
+            if ($fk->getTableName() == $this->getLocaleTableName()) {
+                return $fk;
+            }
+        }
     }
 }

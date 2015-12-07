@@ -96,6 +96,12 @@ class Column extends XMLElement
      * @var				 Domain The domain object associated with this Column.
      */
     private $domain;
+    
+    /**
+     * The name of the table holding the translation information.
+     * @var string
+     */
+    private $localeField;
 
     /**
      * Creates a new column and set the name
@@ -259,6 +265,7 @@ class Column extends XMLElement
             // use boleanValue()
 
             $this->description = $this->getAttribute("description");
+            $this->localeField = $this->getAttribute('localeField');
         } catch (Exception $e) {
             throw new EngineException("Error setting up column " . var_export($this->getAttribute("name"), true) . ": " . $e->getMessage());
         }
@@ -1020,6 +1027,10 @@ class Column extends XMLElement
             $colNode->setAttribute('description', $this->description);
         }
 
+        if ($this->localeField !== null) {
+            $colNode->setAttribute('localeField', $this->localeField);
+        }
+        
         if ($this->isPrimaryKey) {
             $colNode->setAttribute('primaryKey', var_export($this->isPrimaryKey, true));
         }
@@ -1331,4 +1342,31 @@ class Column extends XMLElement
     {
         return NameFactory::generateName(NameFactory::PHP_GENERATOR, array($name, $phpNamingMethod, $namePrefix));
     }
+    
+    /**
+     * Get the localeField for the Column
+     */
+    public function getLocaleField()
+    {
+        return $this->localeField;
+    }
+    
+    /**
+     * Set the localeField for the Column
+     *
+     * @param			 $localeField localeField for the Table
+     */
+    public function setLocaleField($localeField)
+    {
+        $this->localeField = $localeField;
+    }
+    
+    /**
+     * Returns if the column is translatable
+     */
+    public function isTranslatable()
+    {
+        return $this->getLocaleField() !== null;
+    }
+    
 }

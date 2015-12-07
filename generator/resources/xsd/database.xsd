@@ -494,6 +494,13 @@
 				</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
+		<xs:attribute name="localeField" type="xs:string" default="null">
+			<xs:annotation>
+				<xs:documentation xml:lang="en">
+					The name of the field in the translation table holding the translation information .
+				</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>		
 	</xs:complexType>
 
 	<xs:complexType name="foreign-key">
@@ -796,6 +803,13 @@
 				</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
+		<xs:attribute name="localeTable" type="xs:string" default="null">
+			<xs:annotation>
+				<xs:documentation xml:lang="en">
+					The name of the table holding the translation informatio.
+				</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>		
 	</xs:complexType>
 
 	<xs:complexType name="database">

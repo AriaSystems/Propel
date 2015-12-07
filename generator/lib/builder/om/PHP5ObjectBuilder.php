@@ -263,7 +263,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $this->addConstants($script);
             $this->addAttributes($script);
         }
-
+        
         if ($table->hasCrossForeignKeys()) {
             foreach ($table->getCrossFks() as $fkList) {
                 list($refFK, $crossFK) = $fkList;
@@ -276,6 +276,10 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $fkName = $this->getRefFKPhpNameAffix($refFK, $plural = true);
             $this->addScheduledForDeletionAttribute($script, $fkName);
         }
+        
+        if ($this->getTable()->isTranslatable()) {
+            $this->addLocaleAttributes($script);
+        }
 
         if ($this->hasDefaultValues()) {
             $this->addApplyDefaultValues($script);
@@ -284,6 +288,12 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
         $this->addColumnAccessorMethods($script);
         $this->addColumnMutatorMethods($script);
+        
+        if ($this->getTable()->isTranslatable()) {
+            $this->addLocaleAccessorMethods($script);
+            $this->addLocaleMutatorMethods($script);
+            $this->addIsTranslatable($script);
+        }
 
         $this->addHasOnlyDefaultValues($script);
 
@@ -325,6 +335,11 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         $this->addFKMethods($script);
         $this->addRefFKMethods($script);
         $this->addCrossFKMethods($script);
+        
+        if ($this->getTable()->isTranslatable()) {
+            $this->addLocaleMethods($script);
+        }
+        
         $this->addClear($script);
         $this->addClearAllReferences($script);
 
@@ -1220,8 +1235,19 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $script .= $this->getAccessorLazyLoadSnippet($col);
         }
 
-        $script .= "
+        if ($col->isTranslatable()) {
+            print $this->getTable()->getName();
+            $localeTable = $this->getLocaleTable($this->getTable());
+            $localePhpColumnName = ucfirst($localeTable->getColumn($col->getLocaleField(), true)->getPhpName());
+            $script .= "
+        if (\$this->hasCurrentLocale() && \$v = \$this->getCurrentLocale()->get{$localePhpColumnName}()) {
+            return \$v;
+        }
         return \$this->$clo;";
+        } else {
+            $script .= "
+        return \$this->$clo;";
+        }
     }
 
     /**
@@ -1863,6 +1889,19 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 ";
         }
 
+        if ($col->isTranslatable()) {
+            $localeTable = $this->getLocaleTable($this->getTable());
+            $localePhpColumnName = ucfirst($localeTable->getColumn($col->getLocaleField(), true)->getPhpName());            
+        $script .= "
+        if (\$this->locale_no !== null && (\$this->hasCurrentLocale() || \$this->createCurrentLocale())) {
+            \$this->getCurrentLocale()->set{$localePhpColumnName}(\$v);
+            if (! \$this->isNew()) {
+                return \$this;
+            }
+        }
+";            
+        }
+        
         $script .= "
         if (\$this->$clo !== \$v) {
             \$this->$clo = \$v;
@@ -4598,6 +4637,12 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         $script .= "
             \$this->alreadyInSave = false;
 ";
+        
+        if ($this->getTable()->isTranslatable()) {
+            $script .= "
+            \$this->saveLocale();
+";
+        }
         if ($reloadOnInsert || $reloadOnUpdate) {
             $script .= "
             if (\$reloadObject) {
@@ -5650,4 +5695,354 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     }
 ";
     }
+    
+    /**
+     * Adds class attributes.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addLocaleAttributes(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $script .= "
+    /**
+     * The value of the current locale_no
+     *
+     * @var integer
+     */            
+    protected \$locale_no = null;
+
+    /**
+     * @var        ".$localeClass."
+     */
+    protected \$currentLocale = null;
+         
+    /**
+     * @var        ".boolean."
+     */
+    protected \$hasCurrentLocale = null;
+";
+    }
+    
+    /**
+     * Adds method related to handling locale
+     * 
+     * @param string &$script The script will be modified in this method
+     */
+    protected function addLocaleMethods(&$script)
+    {
+        $this->declareClassFromBuilder($this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable())));
+        $this->declareClassFromBuilder($this->getNewStubQueryBuilder($this->getLocaleTable($this->getTable())));
+        
+        $this->addGetLocales($script);
+        $this->addClearCurrentLocale($script);
+        $this->addCurrentLocaleGet($script);
+        $this->addCreateNewCurrentLocale($script);
+        $this->addCopyValuesToLocale($script);
+        $this->addHasCurrentLocale($script);
+        $this->extendIsModified($script);
+        $this->addSaveLocale($script);
+    }
+    
+    /**
+     * Adds the method that clears the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addClearCurrentLocale(&$script)
+    {
+        $script .= "
+   /**
+    * Clears out the current locale
+    *
+    * @return ".$this->getObjectClassname()." The current object (for fluent API support)
+    */
+    public function clearCurrentLocale()
+    {
+        \$this->currentLocale = null;
+        \$this->hasCurrentLocale = null;
+    
+        return \$this;
+    }
+    ";
+    } // addClearCurrentLocale
+
+    /**
+     * Adds the method that returns the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addCurrentLocaleGet(&$script)
+    {
+        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $localeObjectClassName = $this->getRefFKPhpNameAffix($fKforLocaleTable, true);
+        $localeObjectQueryClassName = $this->getNewStubQueryBuilder($fKforLocaleTable->getTable())->getClassname();
+        
+        $script .= "
+    /**
+     * Gets the current Locale object.
+     *
+     * If this ".$this->getObjectClassname()." is new and if locale_no is not empty it will return
+     * an empty locale object ".$localeObjectClassName."  or the current locale object set.
+     *
+     * @return $localeClass Current Locale object
+     */
+    public function getCurrentLocale()
+    {
+        if (\$this->locale_no === null || \$this->hasCurrentLocale === false) {
+            return null;
+        }
+
+        if (\$this->currentLocale !== null) {
+            return \$this->currentLocale;
+        }
+
+        \$this->hasCurrentLocale = false;
+        
+        if (null !== \$this->coll$localeObjectClassName) {
+            foreach (\$this->coll$localeObjectClassName as \$locale) {
+                if (\$locale->getLocaleNo() === \$this->locale_no) {
+                    \$this->currentLocale = \$locale;
+                    \$this->hasCurrentLocale = true;
+                    return \$this->currentLocale;
+                }
+            }
+        }
+        
+        if (\$this->isNew()) {
+            \$this->hasCurrentLocale = false;
+            return null;
+        }
+
+        \$localeNoCriteria = $localeObjectQueryClassName::create()
+            ->filterByLocaleNo(\$this->locale_no)
+            ->setLimit(1);
+        
+        \$this->currentLocale = \$this->get$localeObjectClassName(\$localeNoCriteria);
+        
+        if (null !== \$this->currentLocale) {
+            \$this->hasCurrentLocale = true;
+        }
+        
+        return \$this->currentLocale;
+    }
+";
+    } // addCurrentLocaleGet
+
+    /**
+     * Adds the method that returns the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addCreateNewCurrentLocale(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+
+        $script .= "
+    /**
+     * Create a new locale object ".$localeClass." for the locale_no.
+     * Copies the value from the translatable fields to the new object created    
+     *
+     * @param boolean to determine if the translatable values has to be copied
+     * @return $localeClass Current Locale object
+     */
+    public function createCurrentLocale(\$copyValues = false)
+    {
+        if (\$this->locale_no === null) {
+            return null;
+        }
+
+        \$this->currentLocale = new $localeClass();
+        \$this->currentLocale->setLocaleNo(\$this->locale_no);
+        \$this->hasCurrentLocale = true;
+        
+        if (\$copyValues === true) {
+            \$this->copyValuesToLocale(\$this->currentLocale);        
+        }
+
+        return \$this->currentLocale;
+    }
+";
+    } // addCreateNewCurrentLocale
+
+    /**
+     * Adds the method that copies the  the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addCopyValuesToLocale(&$script)
+    {
+        $localeTable = $this->getLocaleTable($this->getTable());
+        $localeClass = $this->getNewStubObjectBuilder($localeTable)->getClassname();
+        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $fKforLocaleTableMapping = $fKforLocaleTable->getForeignLocalMapping();
+        
+        $script .= "
+    /**
+     * Copies the value from the translatable fields and also sets the value
+     * for relational columns the to the locale object    
+     *
+     * @param $localeClass Locale object to which values has to be set
+     * @return $localeClass Locale object
+     */
+    protected function copyValuesToLocale($localeClass \$locale)
+    {";
+        foreach($fKforLocaleTableMapping as  $localColumnName => $localeColumnName) {
+            $localePhpColumn = $localeTable->getColumn($localeColumnName, true);
+            $localPhpColumn = $this->getTable()->getColumn($localColumnName, true);
+            $script .= "
+        \$locale->set".$localePhpColumn->getPhpName()."("."\$this->"."get".$localPhpColumn->getPhpName()."());";
+        }
+        foreach($this->getTable()->getColumns() as $column) {
+            if ($column->isTranslatable()) {
+                $localePhpColumn = $localeTable->getColumn($column->getLocaleField(), true);
+                $script .= "
+        \$locale->set".$localePhpColumn->getPhpName()."("."\$this->"."get".$column->getPhpName()."());";                
+            }
+        }        
+        $script .= "
+        
+        return \$locale;
+    }
+";
+    } // addCopyValuesToLocale
+    
+    protected function addHasCurrentLocale(&$script)
+    {
+        $script .= "
+    /**
+     * To check if there is a locale for the entity 
+     *
+     * @return boolean
+     */
+    protected function hasCurrentLocale()
+    {
+        if (\$this->hasCurrentLocale === null) {
+            \$this->getCurrentLocale();
+        } 
+        
+        return \$this->hasCurrentLocale;
+    }
+";
+    }    
+    
+    protected function addLocaleAccessorMethods(&$script)
+    {
+        $script .= "
+    /**
+     * Get the locale_no.
+     *
+     * @return integer
+     */
+    public function getLocaleNo()
+    {
+        return \$this->locale_no;
+    }
+";
+    }
+    
+    protected function addLocaleMutatorMethods(&$script)
+    {
+        $script .= "
+    /**
+     * Set the value of locale_no.
+     *
+     * @param integer \$v new value
+     * @return {$this->getObjectClassname()} The current object (for fluent API support)
+     */
+    public function setLocaleNo(\$v)
+    {
+        if (\$v !== null) {
+			\$v = (int) \$v;
+		}
+
+        if (\$v !== null && \$this->locale_no !== \$v) {
+            \$this->clearCurrentLocale();
+        }
+        
+        \$this->locale_no = \$v;
+
+        return \$this;
+    } // setLocaleNo()
+";
+    } //addLocaleMutatorMethods
+    
+    
+    protected function addIsTranslatable(&$script)
+    {
+        $isTranslatable = $this->getTable()->isTranslatable();
+        $script .= "
+    /**
+     * Returns if the the value of locale_no.
+     *
+     * @return boolean whether the given model is translatable
+     */
+    public function IsTranslatable()
+    {";
+
+        if ($isTranslatable) {
+            $script .= "
+        return true;";
+        } else {
+            $script .= "
+        return false;";
+        }
+            $script .= "
+    }
+";
+    } //addLocaleMutatorMethods
+    
+    protected function extendIsModified(&$script)
+    {
+        $script .= "
+    /** 
+     *  Extended method takes care of checking if the Translated values are modified
+     *
+     *  @see BaseObject::isModified()
+     */
+    public function isModified()
+    {
+        \$columnsModified = parent::isModified();
+        \$currentLocaleModified = false;
+        if ((\$this->locale_no !== null && \$this->hasCurrentLocale() === false) || \$this->getCurrentLocale()->isModified()) {
+            \$currentLocaleModified = true;
+        }
+        
+        return \$columnsModified || \$currentLocaleModified;
+    }
+";
+    }
+    
+    protected function addSaveLocale(&$script)
+    {
+        $script .= "
+    /** 
+     *  Method to save the locale
+     */
+    protected function saveLocale()
+    {
+        if ((\$this->locale_no !== null && \$currentLocale = \$this->getCurrentLocale()) || \$currentLocale = \$this->createCurrentLocale()) {
+            \$this->copyValuesToLocale(\$currentLocale);
+            \$currentLocale->save();
+        }
+    }
+";
+    }
+    
+    protected function addGetLocales(&$script)
+    {
+        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $localeObjectClassName = $this->getRefFKPhpNameAffix($fKforLocaleTable, true);
+        $script .= "
+    /**
+     * Gets the all the translations.
+     *
+     * @return PropelObjectCollection|".$localeClass."[] List of Translation objects
+     */
+    public function getLocales()
+    {
+        return \$this->get".$localeObjectClassName."();
+    }
+";        
+    }
+    
+    
+    
 } // PHP5ObjectBuilder

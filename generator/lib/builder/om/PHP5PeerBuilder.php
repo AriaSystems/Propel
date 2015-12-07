@@ -226,7 +226,20 @@ abstract class ".$this->getClassname(). $extendingPeerClass . "
         $script .= "
     /** The default string format for model objects of the related table **/
     const DEFAULT_STRING_FORMAT = '" . $this->getTable()->getDefaultStringFormat() . "';
-
+";
+        if ($this->getTable()->isTranslatable()) {
+            $localTableName = $this->getTable()->getLocaleTableName();
+            $localeClassName = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getFullyQualifiedClassname();
+            $script .= "            
+    /** the table name of the locale table **/
+    const LOCALE_TABLE_NAME = '".$localTableName."';
+        
+    /** the related Propel class of the locale table **/
+    const LOCALE_OM_CLASS = '".addslashes($localeClassName)."';        
+";
+        }
+                
+        $script .= "
     /**
      * An identiy map to hold any loaded instances of ".$this->getObjectClassname()." objects.
      * This must be public so that other peer classes can access this when hydrating from JOIN
@@ -236,7 +249,6 @@ abstract class ".$this->getClassname(). $extendingPeerClass . "
     public static \$instances = array();
 
 ";
-
         // apply behaviors
         $this->applyBehaviorModifier('staticConstants', $script, "	");
         $this->applyBehaviorModifier('staticAttributes', $script, "	");
