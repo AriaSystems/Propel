@@ -1236,7 +1236,6 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
 
         if ($col->isTranslatable()) {
-            print $this->getTable()->getName();
             $localeTable = $this->getLocaleTable($this->getTable());
             $localePhpColumnName = ucfirst($localeTable->getColumn($col->getLocaleField(), true)->getPhpName());
             $script .= "
@@ -4069,6 +4068,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     {
         $queryClassName = $this->getRefFKPhpNameAffix($refFK, $plural = false) . 'Query';
         $relatedName = $this->getFKPhpNameAffix($crossFK, $plural = true);
+        $isTranslatable = $crossFK->getForeignTable()->isTranslatable() && $this->getTable()->isTranslatable();
+
         // No lcfirst() in PHP < 5.3
         $lowerRelatedName = $relatedName;
         $lowerRelatedName[0] = strtolower($lowerRelatedName[0]);
@@ -4102,14 +4103,32 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
                 foreach (\$this->get{$relatedName}() as \${$lowerSingleRelatedName}) {
                     if (\${$lowerSingleRelatedName}->isModified()) {
-                        \${$lowerSingleRelatedName}->save(\$con);
-                    }
+                        \${$lowerSingleRelatedName}->save(\$con);";
+        if ($isTranslatable) {
+            $script .="
+                    } elseif (\${$lowerSingleRelatedName}->isLocaleModified()) {
+                        \$affectedRows += \${$lowerSingleRelatedName}->saveLocale(\$con);
+                    }";
+        } else {
+            $script .="
+                    }";
+        }
+            $script .="
                 }
             } elseif (\$this->coll{$relatedName}) {
                 foreach (\$this->coll{$relatedName} as \${$lowerSingleRelatedName}) {
                     if (\${$lowerSingleRelatedName}->isModified()) {
-                        \${$lowerSingleRelatedName}->save(\$con);
-                    }
+                        \${$lowerSingleRelatedName}->save(\$con);";
+            if ($isTranslatable) {
+                $script .="
+                    } elseif (\${$lowerSingleRelatedName}->isLocaleModified()) {
+                       \$affectedRows += \${$lowerSingleRelatedName}->saveLocale(\$con);
+                    }";
+            } else {
+                $script .="
+                    }";
+            }
+            $script .="
                 }
             }
 ";
@@ -4547,11 +4566,21 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
             foreach ($table->getForeignKeys() as $fk) {
                 $aVarName = $this->getFKVarName($fk);
+                $isTranslatable = $fk->getForeignTable()->isTranslatable() && $this->getTable()->isTranslatable();
                 $script .= "
             if (\$this->$aVarName !== null) {
                 if (\$this->" . $aVarName . "->isModified() || \$this->" . $aVarName . "->isNew()) {
-                    \$affectedRows += \$this->" . $aVarName . "->save(\$con);
+                    \$affectedRows += \$this->" . $aVarName . "->save(\$con);";
+                if ($isTranslatable) {
+                    $script .= "
+                } elseif (\$this->" . $aVarName . "->isLocaleModified()) {
+                    \$affectedRows += \$this->" . $aVarName . "->saveLocale(\$con);
+                }";
+                } else {
+                    $script .= "
+                }";
                 }
+                $script .= "
                 \$this->set".$this->getFKPhpNameAffix($fk, $plural = false)."(\$this->$aVarName);
             }
 ";
@@ -4609,14 +4638,24 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
         foreach ($table->getReferrers() as $refFK) {
             $this->addRefFkScheduledForDeletion($script, $refFK);
+            $isTranslatable = $refFK->getTable()->isTranslatable() && $this->getTable()->isTranslatable();
 
             if ($refFK->isLocalPrimaryKey()) {
                 $varName = $this->getPKRefFKVarName($refFK);
                 $script .= "
             if (\$this->$varName !== null) {
                 if (!\$this->{$varName}->isDeleted() && (\$this->{$varName}->isNew() || \$this->{$varName}->isModified())) {
-                        \$affectedRows += \$this->{$varName}->save(\$con);
+                        \$affectedRows += \$this->{$varName}->save(\$con);";
+                if ($isTranslatable) {
+                    $script .= "
+                } else {
+                    \$affectedRows += \$this->" . $aVarName . "->saveLocale(\$con);
+                    }";
+                } else {
+                    $script .= "
+                }";
                 }
+                $script .= "
             }
 ";
             } else {
@@ -4625,8 +4664,18 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             if (\$this->$collName !== null) {
                 foreach (\$this->$collName as \$referrerFK) {
                     if (!\$referrerFK->isDeleted() && (\$referrerFK->isNew() || \$referrerFK->isModified())) {
-                        \$affectedRows += \$referrerFK->save(\$con);
-                    }
+                        \$affectedRows += \$referrerFK->save(\$con);";
+
+                if ($isTranslatable) {
+                    $script .= "
+                    } elseif (!\$referrerFK->isDeleted() && \$referrerFK->isLocaleModified()) {
+                        \$affectedRows += \$referrerFK->saveLocale(\$con);
+                    }";
+                } else {
+                    $script .= "
+                    }";
+                }
+                    $script .= "
                 }
             }
 ";
@@ -4638,11 +4687,6 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             \$this->alreadyInSave = false;
 ";
         
-        if ($this->getTable()->isTranslatable()) {
-            $script .= "
-            \$this->saveLocale();
-";
-        }
         if ($reloadOnInsert || $reloadOnUpdate) {
             $script .= "
             if (\$reloadObject) {
@@ -4652,7 +4696,13 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
         $script .= "
         }
-
+";
+        if ($this->getTable()->isTranslatable()) {
+            $script .= "
+        \$affectedRows += \$this->saveLocale(\$con);
+";
+        }
+        $script .= "
         return \$affectedRows;
     } // doSave()
 ";
@@ -5717,7 +5767,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected \$currentLocale = null;
          
     /**
-     * @var        ".boolean."
+     * @var        boolean
      */
     protected \$hasCurrentLocale = null;
 ";
@@ -5739,8 +5789,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         $this->addCreateNewCurrentLocale($script);
         $this->addCopyValuesToLocale($script);
         $this->addHasCurrentLocale($script);
-        $this->extendIsModified($script);
         $this->addSaveLocale($script);
+        $this->addIsLocaleModified($script);
     }
     
     /**
@@ -5816,7 +5866,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             ->filterByLocaleNo(\$this->locale_no)
             ->setLimit(1);
         
-        \$this->currentLocale = \$this->get$localeObjectClassName(\$localeNoCriteria);
+        \$this->currentLocale = \$this->get$localeObjectClassName(\$localeNoCriteria)->getFirst();
         
         if (null !== \$this->currentLocale) {
             \$this->hasCurrentLocale = true;
@@ -5964,7 +6014,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     } //addLocaleMutatorMethods
     
     
-    protected function addIsTranslatable(&$script)
+    protected function addisTranslatable(&$script)
     {
         $isTranslatable = $this->getTable()->isTranslatable();
         $script .= "
@@ -5973,7 +6023,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      *
      * @return boolean whether the given model is translatable
      */
-    public function IsTranslatable()
+    public function isTranslatable()
     {";
 
         if ($isTranslatable) {
@@ -5988,42 +6038,21 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 ";
     } //addLocaleMutatorMethods
     
-    protected function extendIsModified(&$script)
-    {
-        $script .= "
-    /** 
-     *  Extended method takes care of checking if the Translated values are modified
-     *
-     *  @see BaseObject::isModified()
-     */
-    public function isModified()
-    {
-        \$columnsModified = parent::isModified();
-        \$currentLocaleModified = false;
-        if ((\$this->locale_no !== null && \$this->hasCurrentLocale() === false) || \$this->getCurrentLocale()->isModified()) {
-            \$currentLocaleModified = true;
-        }
-        
-        return \$columnsModified || \$currentLocaleModified;
-    }
-";
-    }
-    
     protected function addSaveLocale(&$script)
     {
         $script .= "
     /** 
      *  Method to save the locale
      */
-    protected function saveLocale()
+    public function saveLocale(PropelPDO \$con = null)
     {
         if ((\$this->locale_no !== null && \$currentLocale = \$this->getCurrentLocale()) || \$currentLocale = \$this->createCurrentLocale()) {
             \$this->copyValuesToLocale(\$currentLocale);
-            \$currentLocale->save();
+            \$currentLocale->save(\$con);
         }
     }
 ";
-    }
+    } //addSaveLocale
     
     protected function addGetLocales(&$script)
     {
@@ -6041,8 +6070,21 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         return \$this->get".$localeObjectClassName."();
     }
 ";        
+    } //addGetLocales
+    
+    protected function addIsLocaleModified(&$script)
+    {
+        $script .= "
+    /**
+     *  Extended method takes care of checking if the Translated values are modified
+     *
+     *  @see BaseObject::isModified()
+     */
+    public function isLocaleModified()
+    {
+        return (\$this->locale_no !== null && (\$this->hasCurrentLocale() === false || \$this->getCurrentLocale()->isModified()));
     }
-    
-    
+";
+    }
     
 } // PHP5ObjectBuilder
