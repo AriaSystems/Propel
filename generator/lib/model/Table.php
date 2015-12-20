@@ -286,6 +286,12 @@ class Table extends ScopedElement implements IDMethod
     private $localeTableName = null;
 
     /**
+     * Property to identify if this is locale table
+     * @var boolean
+     */
+    private $isLocaleTable = null;
+
+    /**
      * List of behaviors registered for this table
      *
      * @var array
@@ -2086,5 +2092,23 @@ class Table extends ScopedElement implements IDMethod
                 return $fk;
             }
         }
+    }
+
+    /**
+     * Set if it is a locale table
+     *
+     * @param			 $isLocaleTable localeField for the Table
+     */
+    public function setIsLocaleTable($isLocaleTable)
+    {
+        $this->isLocaleTable = $isLocaleTable;
+    }
+
+    /**
+     * Returns if the table is a locale table
+     */
+    public function isLocaleTable()
+    {
+        return (boolean) $this->isLocaleTable;
     }
 }

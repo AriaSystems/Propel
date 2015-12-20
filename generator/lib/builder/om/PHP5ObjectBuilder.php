@@ -340,6 +340,10 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $this->addLocaleMethods($script);
         }
         
+        if ($this->getTable()->isLocaleTable()) {
+            $this->addGetTranslations($script);
+        }
+
         $this->addClear($script);
         $this->addClearAllReferences($script);
 
@@ -2689,7 +2693,12 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $this->applyBehaviorModifier('preDelete', $script, "			");
             $script .= "
             if (\$ret) {
-                \$deleteQuery->delete(\$con);
+                \$deleteQuery->delete(\$con);";
+            if ($this->getTable()->isTranslatable()) {
+            $script .= "
+                \$this->deleteLocales(\$con);";
+            }
+            $script .= "
                 \$this->postDelete(\$con);";
             // apply behaviors
             $this->applyBehaviorModifier('postDelete', $script, "				");
@@ -5782,6 +5791,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     {
         $this->declareClassFromBuilder($this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable())));
         $this->declareClassFromBuilder($this->getNewStubQueryBuilder($this->getLocaleTable($this->getTable())));
+        $this->setTranslationInfoToLocale();
         
         $this->addGetLocales($script);
         $this->addClearCurrentLocale($script);
@@ -5791,6 +5801,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         $this->addHasCurrentLocale($script);
         $this->addSaveLocale($script);
         $this->addIsLocaleModified($script);
+        $this->addDeleteLocales($script);
     }
     
     /**
@@ -5911,6 +5922,24 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     }
 ";
     } // addCreateNewCurrentLocale
+
+    /**
+     * Adds the method that copies the  the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function setTranslationInfoToLocale()
+    {
+        $localeTable = $this->getLocaleTable($this->getTable());
+        $localeTable->setIsLocaleTable(true);
+
+        foreach($this->getTable()->getColumns() as $column) {
+            if ($column->isTranslatable()) {
+                $localeTable->getColumn($column->getLocaleField(), true)->setIsLocaleField(true);
+            }
+        }
+
+        return $localeTable;
+    }
 
     /**
      * Adds the method that copies the  the referrer fkey collection.
@@ -6087,4 +6116,84 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 ";
     }
     
+    /**
+     * Adds the toArray method
+     * @param string &$script The script will be modified in this method.
+     **/
+    protected function addGetTranslations(&$script)
+    {
+        $defaultKeyType = $this->getDefaultKeyType();
+    $script .= "
+    /**
+    * Returns all the translation values in the locale object as an array.
+    *
+    * You can specify the key type of the array by passing one of the class
+    * type constants.
+    *
+    * @param     string  \$keyType (optional) One of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME,
+    *                    BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM.
+    *                    Defaults to BasePeer::$defaultKeyType.";
+    $script .= "
+    *
+    * @return array an associative array containing the field names (as keys) and field values
+    */
+    public function getTranslations(\$keyType = BasePeer::$defaultKeyType, \$includeLazyLoadColumns = true)
+    {
+        \$keys = ".$this->getPeerClassname()."::getFieldNames(\$keyType);
+        \$result = array(";
+        foreach ($this->getTable()->getColumns() as $num => $col) {
+            if ($col->isLocaleField()) {
+                if ($col->isLazyLoad()) {
+                   $script .= "
+            \$keys[$num] => (\$includeLazyLoadColumns) ? \$this->get".$col->getPhpName()."() : null,";
+                } else {
+                $script .= "
+            \$keys[$num] => \$this->get".$col->getPhpName()."(),";
+                }
+            }
+        }
+        $script .= "
+        );";
+        $script .= "
+
+        return \$result;
+    }
+";
+    } // addToArray()
+
+    /**
+     * Adds the method that copies the  the referrer fkey collection.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addDeleteLocales(&$script)
+    {
+        $localClassName = $this->getTable()->getPhpName();
+        $localeTable = $this->getLocaleTable($this->getTable());
+        $localeQueryClass = $this->getNewStubQueryBuilder($this->getLocaleTable($this->getTable()))->getQueryClassname();
+        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $fKforLocaleTableMapping = $fKforLocaleTable->getForeignLocalMapping();
+
+        $script .= "
+    /**
+    * Deletes all the translations related to $localClassName class
+    *
+    * @return $localClassName object
+    */
+    protected function deleteLocales(PropelPDO \$con)
+    {
+        ".$localeQueryClass."::create()";
+
+        foreach($fKforLocaleTableMapping as  $localColumnName => $localeColumnName) {
+            $localePhpColumn = $localeTable->getColumn($localeColumnName, true);
+            $localPhpColumn = $this->getTable()->getColumn($localColumnName, true);
+            $script .= "
+                    ->filterBy".$localePhpColumn->getPhpName()."("."\$this->"."get".$localPhpColumn->getPhpName()."())";
+        }
+        $script .= "
+                    ->delete();
+        return \$this;
+    }
+";
+    } // addCopyValuesToLocale
+
 } // PHP5ObjectBuilder

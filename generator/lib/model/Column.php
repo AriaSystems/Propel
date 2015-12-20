@@ -104,6 +104,12 @@ class Column extends XMLElement
     private $localeField;
 
     /**
+     * Property to identify if this is locale field
+     * @var boolean
+     */
+    private $isLocaleField;
+
+    /**
      * Creates a new column and set the name
      *
      * @param			 name column name
@@ -1369,4 +1375,22 @@ class Column extends XMLElement
         return $this->getLocaleField() !== null;
     }
     
+    /**
+     * Set the localeField for the Column
+     *
+     * @param			 $localeField localeField for the Table
+     */
+    public function setIsLocaleField($isLocaleField)
+    {
+        $this->isLocaleField = (boolean) $isLocaleField;
+    }
+
+    /**
+     * Returns if the column is a localeField
+     */
+    public function isLocaleField()
+    {
+        return (boolean) $this->isLocaleField;
+    }
+
 }
