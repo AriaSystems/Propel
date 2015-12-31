@@ -6069,15 +6069,20 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     
     protected function addSaveLocale(&$script)
     {
+        $localClassName = $this->getTable()->getPhpName();
         $script .= "
     /** 
      *  Method to save the locale
      */
     public function saveLocale(PropelPDO \$con = null)
     {
-        if ((\$this->locale_no !== null && \$currentLocale = \$this->getCurrentLocale()) || \$currentLocale = \$this->createCurrentLocale()) {
-            \$this->copyValuesToLocale(\$currentLocale);
-            \$currentLocale->save(\$con);
+        if ((\$this->locale_no !== null && \$currentLocale = \$this->getCurrentLocale()) || \$currentLocale = \$this->createCurrentLocale(true)) {
+            \$currentLocale->set{$localClassName}(\$this);
+            if (count(array_filter(\$currentLocale->getTranslations())) > 0) {
+                \$currentLocale->save(\$con);
+            } else {
+                \$currentLocale->delete(\$con);
+            }
         }
     }
 ";
