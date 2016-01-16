@@ -6031,7 +6031,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 			\$v = (int) \$v;
 		}
 
-        if (\$v !== null && \$this->locale_no !== \$v) {
+        if ((\$v !== null && \$this->locale_no !== \$v) || (\$v === null)) {
             \$this->clearCurrentLocale();
         }
         
@@ -6082,6 +6082,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                 \$currentLocale->save(\$con);
             } else {
                 \$currentLocale->delete(\$con);
+                \$this->setLocaleNo(null);
             }
         }
     }
