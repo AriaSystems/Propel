@@ -1243,14 +1243,17 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $localeTable = $this->getLocaleTable($this->getTable());
             $localePhpColumnName = ucfirst($localeTable->getColumn($col->getLocaleField(), true)->getPhpName());
             $script .= "
-        if (\$this->hasCurrentLocale() && \$v = \$this->getCurrentLocale()->get{$localePhpColumnName}()) {
+        if (\$this->getTranslation() && \$v = \$this->getTranslation()->get{$localePhpColumnName}()) {
             return \$v;
         }
-        return \$this->$clo;";
-        } else {
+        
+        if (\$this->getDefaultTranslation()) {
+            return \$this->getDefaultTranslation()->get{$localePhpColumnName}();
+        }
+";        
+        }
             $script .= "
         return \$this->$clo;";
-        }
     }
 
     /**
@@ -1896,16 +1899,18 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $localeTable = $this->getLocaleTable($this->getTable());
             $localePhpColumnName = ucfirst($localeTable->getColumn($col->getLocaleField(), true)->getPhpName());            
         $script .= "
-        if (\$this->locale_no !== null && (\$this->hasCurrentLocale() || \$this->createCurrentLocale())) {
-            \$this->getCurrentLocale()->set{$localePhpColumnName}(\$v);
-            if (! \$this->isNew()) {
-                return \$this;
-            }
+        if (\$this->getTranslation()) {
+            \$this->getTranslation()->set{$localePhpColumnName}(\$v);
+            return \$this;
+        }
+        
+        if (\$this->getDefaultTranslation()) {
+            \$this->getDefaultTranslation()->set{$localePhpColumnName}(\$v);
         }
 ";            
         }
         
-        $script .= "
+        	$script .= "
         if (\$this->$clo !== \$v) {
             \$this->$clo = \$v;
             \$this->modifiedColumns[] = ".$this->getColumnConstant($col).";
@@ -2696,7 +2701,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                 \$deleteQuery->delete(\$con);";
             if ($this->getTable()->isTranslatable()) {
             $script .= "
-                \$this->deleteLocales(\$con);";
+                \$this->deleteTranslations(\$con);";
             }
             $script .= "
                 \$this->postDelete(\$con);";
@@ -4115,8 +4120,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                         \${$lowerSingleRelatedName}->save(\$con);";
         if ($isTranslatable) {
             $script .="
-                    } elseif (\${$lowerSingleRelatedName}->isLocaleModified()) {
-                        \$affectedRows += \${$lowerSingleRelatedName}->saveLocale(\$con);
+                    } elseif (\${$lowerSingleRelatedName}->isTranslationsModified()) {
+                        \$affectedRows += \${$lowerSingleRelatedName}->saveTranslations(\$con);
                     }";
         } else {
             $script .="
@@ -4130,8 +4135,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                         \${$lowerSingleRelatedName}->save(\$con);";
             if ($isTranslatable) {
                 $script .="
-                    } elseif (\${$lowerSingleRelatedName}->isLocaleModified()) {
-                       \$affectedRows += \${$lowerSingleRelatedName}->saveLocale(\$con);
+                    } elseif (\${$lowerSingleRelatedName}->isTranslationsModified()) {
+                       \$affectedRows += \${$lowerSingleRelatedName}->saveTranslations(\$con);
                     }";
             } else {
                 $script .="
@@ -4582,8 +4587,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                     \$affectedRows += \$this->" . $aVarName . "->save(\$con);";
                 if ($isTranslatable) {
                     $script .= "
-                } elseif (\$this->" . $aVarName . "->isLocaleModified()) {
-                    \$affectedRows += \$this->" . $aVarName . "->saveLocale(\$con);
+                } elseif (\$this->" . $aVarName . "->isTranslationsModified()) {
+                    \$affectedRows += \$this->" . $aVarName . "->saveTranslations(\$con);
                 }";
                 } else {
                     $script .= "
@@ -4658,7 +4663,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                 if ($isTranslatable) {
                     $script .= "
                 } else {
-                    \$affectedRows += \$this->" . $aVarName . "->saveLocale(\$con);
+                    \$affectedRows += \$this->" . $aVarName . "->saveTranslations(\$con);
                     }";
                 } else {
                     $script .= "
@@ -4677,8 +4682,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
                 if ($isTranslatable) {
                     $script .= "
-                    } elseif (!\$referrerFK->isDeleted() && \$referrerFK->isLocaleModified()) {
-                        \$affectedRows += \$referrerFK->saveLocale(\$con);
+                    } elseif (!\$referrerFK->isDeleted() && \$referrerFK->isTranslationsModified()) {
+                        \$affectedRows += \$referrerFK->saveTranslations(\$con);
                     }";
                 } else {
                     $script .= "
@@ -4708,7 +4713,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 ";
         if ($this->getTable()->isTranslatable()) {
             $script .= "
-        \$affectedRows += \$this->saveLocale(\$con);
+        \$affectedRows += \$this->saveTranslations(\$con);
 ";
         }
         $script .= "
@@ -5771,14 +5776,11 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected \$locale_no = null;
 
     /**
-     * @var        ".$localeClass."
+     * Holds array of translations class
+     *
+     * @var  array of ".$localeClass."
      */
-    protected \$currentLocale = null;
-         
-    /**
-     * @var        boolean
-     */
-    protected \$hasCurrentLocale = null;
+    protected \$translations = array();
 ";
     }
     
@@ -5793,22 +5795,48 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         $this->declareClassFromBuilder($this->getNewStubQueryBuilder($this->getLocaleTable($this->getTable())));
         $this->setTranslationInfoToLocale();
         
-        $this->addGetLocales($script);
-        $this->addClearCurrentLocale($script);
-        $this->addCurrentLocaleGet($script);
-        $this->addCreateNewCurrentLocale($script);
-        $this->addCopyValuesToLocale($script);
-        $this->addHasCurrentLocale($script);
-        $this->addSaveLocale($script);
-        $this->addIsLocaleModified($script);
-        $this->addDeleteLocales($script);
+        $this->addGetDefaultTranslation($script);
+        $this->addGetTranslation($script);
+        $this->addCreateTranslation($script);
+        $this->addClearTranslation($script);
+        $this->addSaveTranslations($script);
+        $this->addDoSaveTranslation($script);
+        $this->addIsTranslationsModified($script);
+        
+        $this->addDoGetDefaultTranslation($script);
+        $this->addDoCreateTranslation($script);
+        $this->addDoClearTranslation($script);
+        $this->addDoGetTranslation($script);
+        $this->addCopyValuesToTranslation($script);
+        $this->addDeleteTranslations($script);
     }
+    
+    /**
+     * Adds the method that clears the locale object for the given locale no.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addDoClearTranslation(&$script)
+    {
+        $script .= "
+   /**
+    * Clears the translation object for the given localeNo
+    *
+    * @return ".$this->getObjectClassname()." The current object (for fluent API support)
+    */
+    public function doClearTranslation(\$localeNo)
+    {
+        unset(\$this->translations[\$localeNo]);
+
+        return \$this;
+    }
+    ";
+    } // addDoClearTranslation     
     
     /**
      * Adds the method that clears the referrer fkey collection.
      * @param string &$script The script will be modified in this method.
      */
-    protected function addClearCurrentLocale(&$script)
+    protected function addClearTranslation(&$script)
     {
         $script .= "
    /**
@@ -5816,112 +5844,219 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     *
     * @return ".$this->getObjectClassname()." The current object (for fluent API support)
     */
-    public function clearCurrentLocale()
+    public function clearTranslation()
     {
-        \$this->currentLocale = null;
-        \$this->hasCurrentLocale = null;
-    
-        return \$this;
+        return \$this->doClearTranslation(\$this->locale_no);
     }
     ";
-    } // addClearCurrentLocale
+    } // addClearTranslation
+    
+    
 
     /**
-     * Adds the method that returns the referrer fkey collection.
-     * @param string &$script The script will be modified in this method.
+     * Adds a method to get locale for a given localeNo
+     * @param unknown $script
      */
-    protected function addCurrentLocaleGet(&$script)
+    protected function addGetTranslation(&$script)
     {
-        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
         $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
-        $localeObjectClassName = $this->getRefFKPhpNameAffix($fKforLocaleTable, true);
-        $localeObjectQueryClassName = $this->getNewStubQueryBuilder($fKforLocaleTable->getTable())->getClassname();
-        
         $script .= "
+            
     /**
-     * Gets the current Locale object.
+     * Gets the translation object for the current locale_no.
      *
      * If this ".$this->getObjectClassname()." is new and if locale_no is not empty it will return
-     * an empty locale object ".$localeObjectClassName."  or the current locale object set.
+     * an empty locale object ".$localeClass.".
      *
-     * @return $localeClass Current Locale object
+     * @return $localeClass Current translation object
      */
-    public function getCurrentLocale()
-    {
-        if (\$this->locale_no === null || \$this->hasCurrentLocale === false) {
-            return null;
-        }
-
-        if (\$this->currentLocale !== null) {
-            return \$this->currentLocale;
-        }
-
-        \$this->hasCurrentLocale = false;
-        
-        if (null !== \$this->coll$localeObjectClassName) {
-            foreach (\$this->coll$localeObjectClassName as \$locale) {
-                if (\$locale->getLocaleNo() === \$this->locale_no) {
-                    \$this->currentLocale = \$locale;
-                    \$this->hasCurrentLocale = true;
-                    return \$this->currentLocale;
-                }
-            }
-        }
-        
-        if (\$this->isNew()) {
-            \$this->hasCurrentLocale = false;
-            return null;
-        }
-
-        \$localeNoCriteria = $localeObjectQueryClassName::create()
-            ->filterByLocaleNo(\$this->locale_no)
-            ->setLimit(1);
-        
-        \$this->currentLocale = \$this->get$localeObjectClassName(\$localeNoCriteria)->getFirst();
-        
-        if (null !== \$this->currentLocale) {
-            \$this->hasCurrentLocale = true;
-        }
-        
-        return \$this->currentLocale;
-    }
-";
-    } // addCurrentLocaleGet
-
-    /**
-     * Adds the method that returns the referrer fkey collection.
-     * @param string &$script The script will be modified in this method.
-     */
-    protected function addCreateNewCurrentLocale(&$script)
-    {
-        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
-
-        $script .= "
-    /**
-     * Create a new locale object ".$localeClass." for the locale_no.
-     * Copies the value from the translatable fields to the new object created    
-     *
-     * @param boolean to determine if the translatable values has to be copied
-     * @return $localeClass Current Locale object
-     */
-    public function createCurrentLocale(\$copyValues = false)
+    public function getTranslation()
     {
         if (\$this->locale_no === null) {
             return null;
         }
 
-        \$this->currentLocale = new $localeClass();
-        \$this->currentLocale->setLocaleNo(\$this->locale_no);
-        \$this->hasCurrentLocale = true;
-        
-        if (\$copyValues === true) {
-            \$this->copyValuesToLocale(\$this->currentLocale);        
+        if (! \$this->doGetTranslation(\$this->locale_no)) {
+            \$this->translations[\$this->locale_no] = \$this->doCreateTranslation(\$this->locale_no);
         }
 
-        return \$this->currentLocale;
+        return \$this->translations[\$this->locale_no];
     }
 ";
-    } // addCreateNewCurrentLocale
+    }  // addGetTranslation
+    
+    /**
+     * Adds a method to get default locale for the given entity
+     * @param unknown $script
+     */
+    protected function addGetDefaultTranslation(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $script .= "
+            
+    /**
+     * Gets the Locale object for the client's default locale no.
+     *
+     * If translation is not available it will return an empty locale object 
+     * ".$localeClass."  or the locale object for client's default locale set.
+     *
+     * @return $localeClass Translation for Client default's locale
+     */
+    public function getDefaultTranslation()
+    {
+        if (method_exists(\$this, 'isGeneric') && \$this->isGeneric()) {
+            return null;
+        }
+        
+        if (! \$this->doGetDefaultTranslation()) {
+            \$this->translations[\$this->getDefaultLocaleNo()] = \$this->doCreateTranslation(\$this->getDefaultLocaleNo());
+        }
+
+        return \$this->translations[\$this->getDefaultLocaleNo()];
+    }
+";
+    } // addGetDefaultTranslation     
+    
+    /**
+     * Adds a method to fetch default locale for the given entity
+     * @param unknown $script
+     */
+    protected function addDoGetDefaultTranslation(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $script .= "
+            
+    /**
+     * Returns the translation for the client's default locale no.
+     * If translation is not available it will return null
+     *
+     * @return $localeClass Translation for Client default's locale
+     */
+    public function doGetDefaultTranslation()
+    {
+        return \$this->doGetTranslation(\$this->getDefaultLocaleNo());
+    }
+";
+    } // addGetDefaultTranslation
+    
+    /**
+     * Adds the method that gets the Locale object for the given locale no 
+     * 
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addDoGetTranslation(&$script)
+    {        
+        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $localeObjectQueryClassName = $this->getNewStubQueryBuilder($fKforLocaleTable->getTable())->getClassname();        
+        $script .= "
+            
+    /**
+     * Gets the Locale object for the given localeNo.
+     *
+     * If this ".$this->getObjectClassname()." is new and if locale_no is not empty it will return
+     * an empty locale object ".$localeClass."  or the current locale object set.
+     *
+     * @param int \$localeNo localeNo 
+     * @return $localeClass Locale object
+     */
+    public function doGetTranslation(\$localeNo)
+    {
+        if (array_key_exists(\$localeNo, \$this->translations) || empty(\$localeNo)) {
+            return \$this->translations[\$localeNo];
+        }
+        
+        if (null !== \$this->coll$localeClass) {
+            foreach (\$this->coll$localeClass as \$locale) {
+                if (\$localeNo == \$locale->getLocaleNo()) {
+                    \$this->translations[\$localeNo] = \$locale;
+                    return \$this->translations[\$localeNo];
+                }
+            }
+        }
+        
+        if (\$this->isNew()) {
+            \$this->translations[\$localeNo] = null;
+            return \$this->translations[\$localeNo];
+        }
+        
+        \$this->translations[\$localeNo] = $localeObjectQueryClassName::create()
+            ->filterByLocaleNo(\$localeNo)
+            ->filterBy{$this->getObjectClassname()}(\$this)
+            ->setLimit(1)
+            ->find()
+            ->getFirst();
+        
+        return \$this->translations[\$localeNo];
+    }
+";
+    } // addDoGetTranslation
+
+    /**
+     * Adds the method that creates new locale for the given locale no if translations 
+     * for the locale_no doesn't exists.
+     * 
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addCreateTranslation(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+
+        $script .= "
+    /**
+     * Create a new locale object ".$localeClass." for the locale_no if translations 
+     * for the locale_no doesn't exists.
+     *
+     * Copies the value from the translatable fields to the new object created    
+     *
+     * @param int \$localeNo for which locale object has to be created
+     * @param boolean to determine if the translatable values has to be copied
+     *
+     * @return $localeClass Locale object
+     */
+    public function createTranslation(\$localeNo, \$copyValues = false)
+    {
+        if (\$localeNo === null || \$this->doGetTranslation(\$localeNo)) {
+            return null;
+        }
+        
+        return \$this->doCreateTranslation(\$localeNo, \$copyValues);
+    }
+";
+    } // addCreateTranslation
+    
+
+    /**
+     * Adds the method that creates new locale for the given locale no.
+     * @param string &$script The script will be modified in this method.
+     */
+    protected function addDoCreateTranslation(&$script)
+    {
+        $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
+        $script .= "
+    /**
+     * Create a new locale object ".$localeClass." for the locale_no
+     *
+     * Copies the value from the translatable fields to the new object created    
+     *
+     * @param int \$localeNo for which locale object has to be created
+     * @param boolean to determine if the translatable values has to be copied
+     * @return $localeClass Current Locale object
+     */
+    public function doCreateTranslation(\$localeNo, \$copyValues = false)
+    {
+        \$this->translations[\$localeNo] = new $localeClass();
+        \$this->translations[\$localeNo]->setLocaleNo(\$localeNo);
+        
+        if (\$copyValues === true) {
+            \$this->copyValuesToTranslation(\$this->translations[\$localeNo]);        
+        }
+        
+        return \$this->translations[\$localeNo];
+    }
+";
+    } // addDoCreateTranslation
+    
 
     /**
      * Adds the method that copies the  the referrer fkey collection.
@@ -5939,13 +6074,13 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
 
         return $localeTable;
-    }
+    } // setTranslationInfoToLocale
 
     /**
      * Adds the method that copies the  the referrer fkey collection.
      * @param string &$script The script will be modified in this method.
      */
-    protected function addCopyValuesToLocale(&$script)
+    protected function addCopyValuesToTranslation(&$script)
     {
         $localeTable = $this->getLocaleTable($this->getTable());
         $localeClass = $this->getNewStubObjectBuilder($localeTable)->getClassname();
@@ -5960,7 +6095,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      * @param $localeClass Locale object to which values has to be set
      * @return $localeClass Locale object
      */
-    protected function copyValuesToLocale($localeClass \$locale)
+    protected function copyValuesToTranslation($localeClass \$locale)
     {";
         foreach($fKforLocaleTableMapping as  $localColumnName => $localeColumnName) {
             $localePhpColumn = $localeTable->getColumn($localeColumnName, true);
@@ -5980,26 +6115,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         return \$locale;
     }
 ";
-    } // addCopyValuesToLocale
-    
-    protected function addHasCurrentLocale(&$script)
-    {
-        $script .= "
-    /**
-     * To check if there is a locale for the entity 
-     *
-     * @return boolean
-     */
-    protected function hasCurrentLocale()
-    {
-        if (\$this->hasCurrentLocale === null) {
-            \$this->getCurrentLocale();
-        } 
-        
-        return \$this->hasCurrentLocale;
-    }
-";
-    }    
+    } // addCopyValuesToTranslation
     
     protected function addLocaleAccessorMethods(&$script)
     {
@@ -6014,7 +6130,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         return \$this->locale_no;
     }
 ";
-    }
+    } //  addLocaleMutatorMethods
     
     protected function addLocaleMutatorMethods(&$script)
     {
@@ -6031,16 +6147,22 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 			\$v = (int) \$v;
 		}
 
-        if ((\$v !== null && \$this->locale_no !== \$v) || (\$v === null)) {
-            \$this->clearCurrentLocale();
+        if (\$v !== null && \$this->locale_no !== \$v) {
+            if (! \$this->doGetTranslation(\$v)) {
+                \$this->doCreateTranslation(\$v, true);
+            }
         }
-        
+
+        if (\$this->locale_no !== null) {
+            \$this->clearTranslation(\$this->locale_no);
+        }
+
         \$this->locale_no = \$v;
 
         return \$this;
     } // setLocaleNo()
 ";
-    } //addLocaleMutatorMethods
+    } // addLocaleMutatorMethods
     
     
     protected function addisTranslatable(&$script)
@@ -6065,49 +6187,57 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             $script .= "
     }
 ";
-    } //addLocaleMutatorMethods
+    } // addisTranslatable
     
-    protected function addSaveLocale(&$script)
+    protected function addSaveTranslations(&$script)
     {
-        $localClassName = $this->getTable()->getPhpName();
         $script .= "
     /** 
-     *  Method to save the locale
+     *  Method to save all the locale
      */
-    public function saveLocale(PropelPDO \$con = null)
+    public function saveTranslations(PropelPDO \$con = null)
     {
-        if ((\$this->locale_no !== null && \$currentLocale = \$this->getCurrentLocale()) || \$currentLocale = \$this->createCurrentLocale(true)) {
-            \$currentLocale->set{$localClassName}(\$this);
-            if (count(array_filter(\$currentLocale->getTranslations())) > 0) {
-                \$currentLocale->save(\$con);
-            } else {
-                \$currentLocale->delete(\$con);
-                \$this->setLocaleNo(null);
+        foreach (array_filter(\$this->translations) as \$locale) {
+            if (\$locale !== null) {
+                \$this->doSaveTranslation(\$locale, \$con);
             }
         }
     }
 ";
-    } //addSaveLocale
+    } // addSaveTranslations     
     
-    protected function addGetLocales(&$script)
+    protected function addDoSaveTranslation(&$script)
     {
-        $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
+        $localClassName = $this->getTable()->getPhpName();
         $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
-        $localeObjectClassName = $this->getRefFKPhpNameAffix($fKforLocaleTable, true);
+        $localePeerClass = $this->getNewPeerBuilder($this->getLocaleTable($this->getTable()))->getClassname();
         $script .= "
-    /**
-     * Gets the all the translations.
-     *
-     * @return PropelObjectCollection|".$localeClass."[] List of Translation objects
+    /** 
+     * Method to save the locale
      */
-    public function getLocales()
+    protected function doSaveTranslation({$localeClass} \$locale, PropelPDO \$con = null)
     {
-        return \$this->get".$localeObjectClassName."();
+        \$locale->set{$localClassName}(\$this);
+
+        // For default locale, translations will be stored will be inserted using triggers 
+        // To ensure that unique constrain is not thrown, setting the locale object as existing one
+        if (\$locale->isNew() && \$locale->getLocaleNo() == \$this->getDefaultLocaleNo()) {
+            \$count = $localePeerClass::doCount(\$this->buildPkeyCriteria(), \$con);
+            if (\$count > 0) {
+                \$locale->setNew(false);
+            }
+        }
+        if (count(array_filter(\$locale->getTranslations())) > 0) {
+            \$locale->save(\$con);
+        } else {
+            \$locale->delete(\$con);
+            \$this->clearTranslation(\$locale->getLocaleNo());
+        }
     }
-";        
-    } //addGetLocales
+";
+    } // addDoSaveTranslation
     
-    protected function addIsLocaleModified(&$script)
+    protected function addIsTranslationsModified(&$script)
     {
         $script .= "
     /**
@@ -6115,12 +6245,18 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      *
      *  @see BaseObject::isModified()
      */
-    public function isLocaleModified()
+    public function isTranslationsModified()
     {
-        return (\$this->locale_no !== null && (\$this->hasCurrentLocale() === false || \$this->getCurrentLocale()->isModified()));
+        foreach (array_filter(\$this->translations) as \$locale) {
+            if (\$locale->isNew() || \$locale->isModified()) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 ";
-    }
+    } // addIsTranslationsModified
     
     /**
      * Adds the toArray method
@@ -6165,13 +6301,13 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         return \$result;
     }
 ";
-    } // addToArray()
+    } // addGetTranslations
 
     /**
      * Adds the method that copies the  the referrer fkey collection.
      * @param string &$script The script will be modified in this method.
      */
-    protected function addDeleteLocales(&$script)
+    protected function addDeleteTranslations(&$script)
     {
         $localClassName = $this->getTable()->getPhpName();
         $localeTable = $this->getLocaleTable($this->getTable());
@@ -6185,7 +6321,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     *
     * @return $localClassName object
     */
-    protected function deleteLocales(PropelPDO \$con)
+    protected function deleteTranslations(PropelPDO \$con)
     {
         ".$localeQueryClass."::create()";
 
@@ -6197,9 +6333,10 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
         $script .= "
                     ->delete();
+
         return \$this;
     }
 ";
-    } // addCopyValuesToLocale
+    } // addDeleteTranslations
 
 } // PHP5ObjectBuilder

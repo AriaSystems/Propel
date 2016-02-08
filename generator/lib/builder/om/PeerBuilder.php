@@ -142,6 +142,9 @@ abstract class PeerBuilder extends OMBuilder
 
         $this->addTranslateFieldName($script);
         $this->addGetFieldNames($script);
+        if($this->getTable()->isTranslatable()) {
+            $this->addGetTranstableFieldNames($script);
+        }
 
         if ($table->hasEnumColumns()) {
             $this->addGetValueSets($script);

@@ -256,6 +256,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . "
         $this->addFieldNamesAttribute($script);
         $this->addFieldKeysAttribute($script);
 
+        if ($this->getTable()->isTranslatable()) {
+            $this->addTranstableFieldNamesAttribute($script);
+        }
+
         if ($this->getTable()->hasEnumColumns()) {
             $this->addEnumColumnAttributes($script);
         }
@@ -342,6 +346,66 @@ abstract class ".$this->getClassname(). $extendingPeerClass . "
         BasePeer::TYPE_NUM => array (";
         foreach ($tableColumns as $num => $col) {
             $script .= "$num, ";
+        }
+        $script .= ")
+    );
+";
+    }    
+    
+    protected function addTranstableFieldNamesAttribute(&$script)
+    {
+        $table = $this->getTable();
+
+        $tableColumns = $table->getColumns();
+
+        $script .= "
+    /**
+     * holds an array of translatable fieldnames
+     *
+     * first dimension keys are the type constants
+     * e.g. ".$this->getPeerClassname()."::\$fieldNames[".$this->getPeerClassname()."::TYPE_PHPNAME][0] = 'Id'
+     */
+    protected static \$transtableFieldNames = array (
+        BasePeer::TYPE_PHPNAME => array (";
+        foreach ($tableColumns as $col) {
+            if($col->isTranslatable()) {
+                $script .= "'".$col->getPhpName()."', ";
+            }
+        }
+        $script .= "),
+        BasePeer::TYPE_STUDLYPHPNAME => array (";
+        foreach ($tableColumns as $col) {
+            if($col->isTranslatable()) {
+                $script .= "'".$col->getStudlyPhpName()."', ";
+            }
+        }
+        $script .= "),
+        BasePeer::TYPE_COLNAME => array (";
+        foreach ($tableColumns as $col) {
+            if($col->isTranslatable()) {
+                $script .= $this->getColumnConstant($col, $this->getPeerClassname()).", ";
+            }            
+        }
+        $script .= "),
+        BasePeer::TYPE_RAW_COLNAME => array (";
+        foreach ($tableColumns as $col) {
+            if($col->isTranslatable()) {
+                $script .= "'" . $col->getConstantColumnName() . "', ";
+            }
+        }
+        $script .= "),
+        BasePeer::TYPE_FIELDNAME => array (";
+        foreach ($tableColumns as $col) {
+            if($col->isTranslatable()) { 
+                $script .= "'".$col->getName()."', ";
+            }
+        }
+        $script .= "),
+        BasePeer::TYPE_NUM => array (";
+        foreach ($tableColumns as $num => $col) {
+            if($col->isTranslatable()) { 
+                $script .= "$num, ";
+            }
         }
         $script .= ")
     );
@@ -444,7 +508,31 @@ abstract class ".$this->getClassname(). $extendingPeerClass . "
     }
 ";
 
-    } // addGetFieldNames()
+    } // addGetFieldNames()     
+    
+    protected function addGetTranstableFieldNames(&$script)
+    {
+        $script .= "
+    /**
+     * Returns an array of translatable field names.
+     *
+     * @param      string \$type The type of fieldnames to return:
+     *                      One of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME
+     *                      BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM
+     * @return array           A list of field names
+     * @throws PropelException - if the type is not valid.
+     */
+    public static function getTranstableFieldNames(\$type = BasePeer::TYPE_PHPNAME)
+    {
+        if (!array_key_exists(\$type, ".$this->getPeerClassname()."::\$transtableFieldNames)) {
+            throw new PropelException('Method getFieldNames() expects the parameter \$type to be one of the class constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME, BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM. ' . \$type . ' was given.');
+        }
+
+        return ".$this->getPeerClassname()."::\$transtableFieldNames[\$type];
+    }
+";
+
+    } // addGetTranstableFieldNames()
 
     protected function addTranslateFieldName(&$script)
     {
