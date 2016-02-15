@@ -342,6 +342,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         
         if ($this->getTable()->isLocaleTable()) {
             $this->addGetTranslations($script);
+            $this->addIsClientDefaultLocale($script);
         }
 
         $this->addClear($script);
@@ -5948,7 +5949,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     {        
         $fKforLocaleTable = $this->getTable()->getFKforLocaleTable();
         $localeClass = $this->getNewStubObjectBuilder($this->getLocaleTable($this->getTable()))->getClassname();
-        $localeObjectQueryClassName = $this->getNewStubQueryBuilder($fKforLocaleTable->getTable())->getClassname();        
+        $localeObjectQueryClassName = $this->getNewStubQueryBuilder($fKforLocaleTable->getTable())->getClassname();   
+        $localeObjectClassName = $this->getRefFKPhpNameAffix($fKforLocaleTable, true);
         $script .= "
             
     /**
@@ -5966,8 +5968,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             return \$this->translations[\$localeNo];
         }
         
-        if (null !== \$this->coll$localeClass) {
-            foreach (\$this->coll$localeClass as \$locale) {
+        if (null !== \$this->coll$localeObjectClassName) {
+            foreach (\$this->coll$localeObjectClassName as \$locale) {
                 if (\$localeNo == \$locale->getLocaleNo()) {
                     \$this->translations[\$localeNo] = \$locale;
                     return \$this->translations[\$localeNo];
@@ -6229,7 +6231,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
         if (count(array_filter(\$locale->getTranslations())) > 0) {
             \$locale->save(\$con);
-        } else {
+        } elseif (! (\$locale->isDeleted() || \$locale->isClientDefaultLocale())) {
             \$locale->delete(\$con);
             \$this->clearTranslation(\$locale->getLocaleNo());
         }
@@ -6248,7 +6250,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     public function isTranslationsModified()
     {
         foreach (array_filter(\$this->translations) as \$locale) {
-            if (\$locale->isNew() || \$locale->isModified()) {
+            if (\$locale->isModified()) {
                 return true;
             }
         }
@@ -6302,6 +6304,26 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     }
 ";
     } // addGetTranslations
+    
+    /**
+     * Adds the toArray method
+     * @param string &$script The script will be modified in this method.
+     **/
+    protected function addIsClientDefaultLocale(&$script)
+    {
+        $defaultKeyType = $this->getDefaultKeyType();
+        $script .= "
+        /**
+        * Returns if the translations if for client's default locale.
+        *
+        * @return boolean
+        */
+    public function isClientDefaultLocale(\$keyType = BasePeer::$defaultKeyType, \$includeLazyLoadColumns = true)
+    {
+        return \$this->getLocaleNo() === \$this->getDefaultLocaleNo();
+    }
+";
+    } // addGetTranslations    
 
     /**
      * Adds the method that copies the  the referrer fkey collection.
