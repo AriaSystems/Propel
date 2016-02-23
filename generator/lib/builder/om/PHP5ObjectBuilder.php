@@ -6224,7 +6224,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         // For default locale, translations will be stored will be inserted using triggers 
         // To ensure that unique constrain is not thrown, setting the locale object as existing one
         if (\$locale->isNew() && \$locale->getLocaleNo() == \$this->getDefaultLocaleNo()) {
-            \$count = $localePeerClass::doCount(\$this->buildPkeyCriteria(), \$con);
+            \$count = $localePeerClass::doCount(\$locale->buildPkeyCriteria(), \$con);
             if (\$count > 0) {
                 \$locale->setNew(false);
             }
