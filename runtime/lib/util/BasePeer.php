@@ -694,17 +694,19 @@ class BasePeer
             foreach ($criterion->getAttachedCriterion() as $attachedCriterion) {
                 $tableName = $attachedCriterion->getTable();
 
-                $table = $criteria->getTableForAlias($tableName);
-                if ($table !== null) {
-                    $fromClause[] = $table . ' ' . $tableName;
-                } else {
-                    $fromClause[] = $tableName;
-                    $table = $tableName;
-                }
+                if($tableName != null) {
+                    $table = $criteria->getTableForAlias($tableName);
+                    if ($table !== null) {
+                        $fromClause[] = $table . ' ' . $tableName;
+                    } else {
+                        $fromClause[] = $tableName;
+                        $table = $tableName;
+                    }
 
-                if (($criteria->isIgnoreCase() || $attachedCriterion->isIgnoreCase())
-                && $dbMap->getTable($table)->getColumn($attachedCriterion->getColumn())->isText()) {
-                    $attachedCriterion->setIgnoreCase(true);
+                    if (($criteria->isIgnoreCase() || $attachedCriterion->isIgnoreCase())
+                    && $dbMap->getTable($table)->getColumn($attachedCriterion->getColumn())->isText()) {
+                        $attachedCriterion->setIgnoreCase(true);
+                    }
                 }
             }
 
@@ -785,6 +787,10 @@ class BasePeer
 
                 if ($criteria->isIgnoreCase() && $column && $column->isText()) {
                     $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$tableAlias.$columnAlias");
+                    $orderByClause[] =  $ignoreCaseColumn . $direction;
+                    $selectSql .= ', ' . $ignoreCaseColumn;
+                } elseif($criteria->isIgnoreCase() && $columnAlias && $column == null) {
+                    $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
                     $orderByClause[] =  $ignoreCaseColumn . $direction;
                     $selectSql .= ', ' . $ignoreCaseColumn;
                 } else {
