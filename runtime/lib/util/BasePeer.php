@@ -790,9 +790,26 @@ class BasePeer
                     $orderByClause[] =  $ignoreCaseColumn . $direction;
                     $selectSql .= ', ' . $ignoreCaseColumn;
                 } elseif($criteria->isIgnoreCase() && $columnAlias && $column == null) {
-                    $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
-                    $orderByClause[] =  $ignoreCaseColumn . $direction;
-                    $selectSql .= ', ' . $ignoreCaseColumn;
+                    foreach(current($criteria->getSelectQueries())->getAsColumns() as $k=>$v){
+                        if($k == $columnAlias){
+                            $data = explode('.', $v);
+                            $tableName = $data[0];
+                            $columnName = $data[1];
+                        }
+                    }
+
+                    $column = ($tableName && $dbMap->hasTable($tableName)) ? $dbMap->getTable($tableName)->getColumn($columnName) : null;
+                    if($column) {
+                        if(!$column->isNumeric()) {
+                            $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
+                            $orderByClause[] =  $ignoreCaseColumn . $direction;
+                        } else {
+                            $orderByClause[] = $orderByColumn;
+                        }
+                    } else {
+                        $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
+                        $orderByClause[] =  $ignoreCaseColumn . $direction;
+                    }
                 } else {
                     $orderByClause[] = $orderByColumn;
                 }
