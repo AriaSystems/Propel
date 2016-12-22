@@ -798,7 +798,7 @@ class BasePeer
                         }
                     }
 
-                    $column = ($tableName && $dbMap->hasTable($tableName)) ? $dbMap->getTable($tableName)->getColumn($columnName) : null;
+                    $column = ($tableName && $dbMap->hasTable($tableName) && $dbMap->getTable($tableName)->hasColumn($columnName)) ? $dbMap->getTable($tableName)->getColumn($columnName) : null;
                     if($column) {
                         if(!$column->isNumeric()) {
                             $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
