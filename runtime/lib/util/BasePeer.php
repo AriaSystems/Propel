@@ -694,17 +694,19 @@ class BasePeer
             foreach ($criterion->getAttachedCriterion() as $attachedCriterion) {
                 $tableName = $attachedCriterion->getTable();
 
-                $table = $criteria->getTableForAlias($tableName);
-                if ($table !== null) {
-                    $fromClause[] = $table . ' ' . $tableName;
-                } else {
-                    $fromClause[] = $tableName;
-                    $table = $tableName;
-                }
+                if($tableName != null) {
+                    $table = $criteria->getTableForAlias($tableName);
+                    if ($table !== null) {
+                        $fromClause[] = $table . ' ' . $tableName;
+                    } else {
+                        $fromClause[] = $tableName;
+                        $table = $tableName;
+                    }
 
-                if (($criteria->isIgnoreCase() || $attachedCriterion->isIgnoreCase())
-                && $dbMap->getTable($table)->getColumn($attachedCriterion->getColumn())->isText()) {
-                    $attachedCriterion->setIgnoreCase(true);
+                    if (($criteria->isIgnoreCase() || $attachedCriterion->isIgnoreCase())
+                    && $dbMap->getTable($table)->getColumn($attachedCriterion->getColumn())->isText()) {
+                        $attachedCriterion->setIgnoreCase(true);
+                    }
                 }
             }
 
@@ -787,6 +789,27 @@ class BasePeer
                     $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$tableAlias.$columnAlias");
                     $orderByClause[] =  $ignoreCaseColumn . $direction;
                     $selectSql .= ', ' . $ignoreCaseColumn;
+                } elseif($criteria->isIgnoreCase() && $columnAlias && $column == null) {
+                    foreach(current($criteria->getSelectQueries())->getAsColumns() as $k=>$v){
+                        if($k == $columnAlias){
+                            $data = explode('.', $v);
+                            $tableName = $data[0];
+                            $columnName = $data[1];
+                        }
+                    }
+
+                    $column = ($tableName && $dbMap->hasTable($tableName) && $dbMap->getTable($tableName)->hasColumn($columnName)) ? $dbMap->getTable($tableName)->getColumn($columnName) : null;
+                    if($column) {
+                        if(!$column->isNumeric()) {
+                            $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
+                            $orderByClause[] =  $ignoreCaseColumn . $direction;
+                        } else {
+                            $orderByClause[] = $orderByColumn;
+                        }
+                    } else {
+                        $ignoreCaseColumn = $db->ignoreCaseInOrderBy("$columnAlias");
+                        $orderByClause[] =  $ignoreCaseColumn . $direction;
+                    }
                 } else {
                     $orderByClause[] = $orderByColumn;
                 }
